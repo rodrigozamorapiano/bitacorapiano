@@ -27,9 +27,10 @@ button.p{background:var(--pb);border-color:var(--pb);color:var(--pt);font-weight
 button.p.r{background:var(--no);border-color:var(--no)}
 .form{display:grid;grid-template-columns:repeat(auto-fit,minmax(150px,1fr));gap:10px;align-items:end}
 .full{grid-column:1/-1}
-.types{display:flex;gap:6px}.types button{flex:1;padding:10px 6px}
+.types{display:grid;grid-template-columns:repeat(auto-fit,minmax(140px,1fr));gap:6px}.types button{padding:10px 6px}
 .types button.on{font-weight:700;color:#000}
 .chips{display:flex;gap:6px;margin-top:6px;flex-wrap:wrap}.chips button{padding:4px 10px;font-size:.78rem;border-radius:999px}
+.chips.big button{padding:8px 12px;font-size:.85rem;text-align:left;border-radius:12px}
 .sc{overflow-x:auto}
 table{border-collapse:collapse;width:100%;min-width:0;font-size:.88rem}
 th,td{padding:8px 6px;border-bottom:1px solid var(--bd);text-align:left;font-variant-numeric:tabular-nums;vertical-align:top}
@@ -73,6 +74,7 @@ svg text{fill:var(--mut);font-size:11px}
       <div><label>Duración (min)</label><input id="fm" type="number" min="1" step="1" placeholder="30"><div class="chips" id="qk"></div></div>
       <div class="full"><label>Tipo de práctica</label><div class="types" id="ft"></div></div>
       <div class="full" id="pw"><label>Pieza (opcional)</label><select id="fp"></select></div>
+      <div class="full" id="pm" style="display:none"><label>Piezas del concierto (toca para elegir; el número es el orden del programa)</label><div class="chips big" id="pmc"></div></div>
       <div class="full"><label>Objetivo de la sesión</label><textarea id="fo" placeholder="Ej.: limpiar los compases 12–16 a 60 bpm, manos separadas"></textarea></div>
       <div class="full"><button class="p r" style="width:100%" onclick="addS()">Agregar a la sesión</button></div>
     </div>
@@ -126,7 +128,7 @@ svg text{fill:var(--mut);font-size:11px}
 
 <script>
 const $=id=>document.getElementById(id);
-const TY={calentamiento:{n:"Calentamiento",c:"#ffb020"},analisis:{n:"Análisis",c:"#38bdf8"},repertorio:{n:"Repertorio",c:"#00e08a"}};
+const TY={calentamiento:{n:"Calentamiento",c:"#ffb020"},analisis:{n:"Análisis",c:"#38bdf8"},repertorio:{n:"Repertorio",c:"#00e08a"},concierto:{n:"Concierto",c:"#ff4d6a"}};
 const TK=Object.keys(TY),ST={ok:"#00e08a",low:"#ff4d6a",first:"#d4d4d8"};
 const MES=["Ene","Feb","Mar","Abr","May","Jun","Jul","Ago","Sep","Oct","Nov","Dic"];
 let S=[],P=[];
@@ -139,6 +141,8 @@ const dm=d=>d.slice(8)+"/"+d.slice(5,7);
 const esc=s=>String(s==null?"":s).replace(/[&<>"']/g,c=>({"&":"&amp;","<":"&lt;",">":"&gt;",'"':"&quot;","'":"&#39;"}[c]));
 const rgba=(h,a)=>{const n=parseInt(h.slice(1),16);return`rgba(${n>>16},${n>>8&255},${n&255},${a})`};
 const fm=m=>m<60?m+" min":Math.floor(m/60)+" h"+(m%60?" "+m%60+" min":"");
+const pcs=e=>e.pieces&&e.pieces.length?e.pieces:(e.piece?[e.piece]:[]);
+const share=e=>e.min/Math.max(1,pcs(e).length);
 const pName=id=>{const p=P.find(x=>x.id===id);return p?esc(p.composer?p.composer+" — "+p.title:p.title):"<span style='color:var(--mut)'>Pieza eliminada</span>"};
 
 // ---------- datos derivados ----------
@@ -168,17 +172,26 @@ function goTo(date){$("fd").value=date;tab(1)}
 let curType="repertorio";
 function renderTypes(){
   $("ft").innerHTML=TK.map(k=>`<button class="${curType===k?"on":""}" style="${curType===k?`background:${TY[k].c};border-color:${TY[k].c}`:""}" onclick="curType='${k}';renderTypes()">${TY[k].n}</button>`).join("");
-  $("pw").style.display=curType==="calentamiento"?"none":"block";
+  $("pw").style.display=(curType==="analisis"||curType==="repertorio")?"block":"none";
+  $("pm").style.display=curType==="concierto"?"block":"none";
+  renderMulti();
 }
+let sel=[];
+function renderMulti(){
+  sel=sel.filter(id=>P.some(p=>p.id===id));
+  const L=[...P].sort((a,b)=>(a.composer+a.title).localeCompare(b.composer+b.title));
+  $("pmc").innerHTML=L.length?L.map(p=>{const i=sel.indexOf(p.id),on=i>=0,c=TY.concierto.c;return `<button onclick="tg('${p.id}')" style="${on?`background:${c};border-color:${c};color:#000;font-weight:700`:""}">${on?(i+1)+" · ":""}${esc(p.composer?p.composer+" — "+p.title:p.title)}</button>`}).join(""):`<span class="hint" style="margin:0">Primero agrega piezas en la pestaña Biblioteca.</span>`;
+}
+function tg(id){const i=sel.indexOf(id);i>=0?sel.splice(i,1):sel.push(id);renderMulti()}
 function renderPieceSel(){
   const cur=$("fp").value;
   $("fp").innerHTML='<option value="">— Sin pieza —</option>'+[...P].sort((a,b)=>(a.composer+a.title).localeCompare(b.composer+b.title)).map(p=>`<option value="${p.id}">${esc(p.composer?p.composer+" — "+p.title:p.title)}</option>`).join("");
   if(P.some(p=>p.id===cur))$("fp").value=cur;
 }
 function addS(){
-  const e={id:uid(),date:$("fd").value,type:curType,min:parseInt($("fm").value),goal:$("fo").value.trim(),piece:curType==="calentamiento"?"":$("fp").value};
+  const e={id:uid(),date:$("fd").value,type:curType,min:parseInt($("fm").value),goal:$("fo").value.trim(),piece:(curType==="analisis"||curType==="repertorio")?$("fp").value:"",pieces:curType==="concierto"?[...sel]:[]};
   if(!e.date||!(e.min>0))return $("hint").textContent="Indica la fecha y una duración mayor a 0 minutos.";
-  S.push(e);save();$("fm").value="";$("fo").value="";$("hint").textContent="Registrado.";renderAll();
+  S.push(e);save();sel=[];$("fm").value="";$("fo").value="";$("hint").textContent="Registrado.";renderAll();
 }
 function delS(id){S=S.filter(e=>e.id!==id);save();renderAll()}
 
@@ -203,7 +216,7 @@ function renderSesion(){
   $("pgb").style.width=Math.min(100,pct)+"%";$("pgb").style.background=col;
   const diff=pm===null?null:total-pm;
   $("sk").innerHTML=`<div class="kpi"><span>Duración del día</span><b>${fm(total)}</b></div><div class="kpi"><span>Sesión anterior</span><b>${pm===null?"—":fm(pm)}</b></div><div class="kpi"><span>Diferencia</span><b class="${diff===null?"":diff>=0?"up":"dn"}">${diff===null?"—":(diff>=0?"+":"−")+Math.abs(diff)+" min"}</b></div><div class="kpi"><span>Racha de metas</span><b>${streakNow()}</b></div>`;
-  $("stab").innerHTML=d?`<table><tr><th>Tipo</th><th>Pieza</th><th>Objetivo</th><th>Min</th><th></th></tr>`+d.items.map(e=>`<tr><td><i class="dot" style="background:${TY[e.type].c}"></i>${TY[e.type].n}</td><td>${e.piece?pName(e.piece):"—"}</td><td>${esc(e.goal)||"—"}</td><td>${e.min}</td><td><button onclick="delS('${e.id}')">✕</button></td></tr>`).join("")+`<tr><th colspan="3">Total</th><th>${d.min}</th><th></th></tr></table>`:`<p class="hint">Aún no hay práctica registrada en esta fecha.</p>`;
+  $("stab").innerHTML=d?`<table><tr><th>Tipo</th><th>Pieza</th><th>Objetivo</th><th>Min</th><th></th></tr>`+d.items.map(e=>`<tr><td><i class="dot" style="background:${TY[e.type].c}"></i>${TY[e.type].n}</td><td>${pcs(e).length?pcs(e).map(pName).join("<br>"):"—"}</td><td>${esc(e.goal)||"—"}</td><td>${e.min}</td><td><button onclick="delS('${e.id}')">✕</button></td></tr>`).join("")+`<tr><th colspan="3">Total</th><th>${d.min}</th><th></th></tr></table>`:`<p class="hint">Aún no hay práctica registrada en esta fecha.</p>`;
   const mx=Math.max(1,...TK.map(k=>d?d.t[k]||0:0));
   $("sbar").innerHTML=TK.map(k=>`<div class="row"><span>${TY[k].n}</span><i style="width:${(d&&d.t[k]||0)/mx*55}%;background:${TY[k].c};min-width:${d&&d.t[k]?4:0}px"></i><small>${d&&d.t[k]||0} min</small></div>`).join("");
 }
@@ -224,7 +237,7 @@ function renderLib(){
   const q=$("ps").value.trim().toLowerCase();
   const L=[...P].sort((a,b)=>(a.composer+a.title).localeCompare(b.composer+b.title)).filter(p=>!q||(p.composer+" "+p.title).toLowerCase().includes(q));
   $("plist").innerHTML=L.length?L.map(p=>{
-    const es=S.filter(e=>e.piece===p.id),tot=es.reduce((s,e)=>s+e.min,0),last=es.map(e=>e.date).sort().pop();
+    const es=S.filter(e=>pcs(e).includes(p.id)),tot=Math.round(es.reduce((s,e)=>s+share(e),0)),last=es.map(e=>e.date).sort().pop();
     return `<div class="piece"><h3>${esc(p.title)}</h3><div class="cm">${esc(p.composer)||"Compositor sin indicar"}</div>${p.notes?`<p>${esc(p.notes)}</p>`:""}<div class="meta">${tot?`${fm(tot)} practicados · ${es.length} registro${es.length>1?"s":""} · última vez ${dm(last)}`:"Aún sin práctica registrada"}</div><div class="acts"><button onclick="editPiece('${p.id}')">Editar</button><button onclick="delPiece('${p.id}')" style="${armedP===p.id?"border-color:var(--no);color:var(--no)":""}">${armedP===p.id?"¿Seguro? Toca otra vez":"Eliminar"}</button></div></div>`}).join(""):`<p class="hint">${P.length?"Sin resultados.":"Tu biblioteca está vacía. Agrega tu primera pieza arriba."}</p>`;
 }
 
@@ -282,21 +295,22 @@ function renderAnio(){
    mv.forEach((x,i)=>{let acc=0;const w=bw*.65,xx=m.l+i*bw+(bw-w)/2;TK.forEach(t=>{const v=x.t[t]||0;if(!v)return;const y0=a.sy(acc),y1=a.sy(acc+v);b+=`<rect x="${xx}" y="${y1}" width="${w}" height="${y0-y1}" fill="${TY[t].c}"><title>${MES[i]} · ${TY[t].n}: ${fm(v)}</title></rect>`;acc+=v});b+=`<text x="${xx+w/2}" y="${H-8}" text-anchor="middle">${MES[i]}</text>`});
    $("stk").innerHTML=svg(W,H,b)}
   // top piezas
-  const pt={};S.filter(e=>e.date.startsWith(y+"-")&&e.piece).forEach(e=>pt[e.piece]=(pt[e.piece]||0)+e.min);
+  const pt={};S.filter(e=>e.date.startsWith(y+"-")).forEach(e=>pcs(e).forEach(id=>pt[id]=(pt[id]||0)+share(e)));
   const top=Object.entries(pt).sort((a,b)=>b[1]-a[1]).slice(0,6),tm=Math.max(1,...top.map(x=>x[1]));
-  $("top").innerHTML=top.length?top.map(([id,mn])=>`<div class="row" style="flex-wrap:wrap"><span style="min-width:100%;color:var(--tx)">${pName(id)}</span><i style="width:${mn/tm*55}%;background:var(--ac);min-width:4px"></i><small>${fm(mn)}</small></div>`).join(""):`<p class="hint">Vincula piezas a tus sesiones para ver cuáles practicas más.</p>`;
+  $("top").innerHTML=top.length?top.map(([id,mn])=>`<div class="row" style="flex-wrap:wrap"><span style="min-width:100%;color:var(--tx)">${pName(id)}</span><i style="width:${mn/tm*55}%;background:var(--ac);min-width:4px"></i><small>${fm(Math.round(mn))}</small></div>`).join(""):`<p class="hint">Vincula piezas a tus sesiones para ver cuáles practicas más.</p>`;
 }
 
 // ---------- datos ----------
 function demo(){
-  const pcs=[["Chopin","Nocturno Op. 9 n.º 2","Cuidar el rubato en la melodía; pedal cambiando con cada armonía. Compases 20–24: digitación 5-4-3."],["Bach","Invención n.º 1 en Do mayor","Manos separadas a 60 bpm; articulación en non legato."],["Debussy","Clair de lune","Equilibrio de voces, pp en el inicio. Cuidar el pasaje de arpegios del compás 27."],["Beethoven","Sonata Op. 13 «Patética», 2.º mov.","Cantabile en la melodía; mano izquierda muy suave."],["Satie","Gymnopédie n.º 1","Tempo lento y regular; sin prisa en los silencios."]].map(a=>({id:uid(),composer:a[0],title:a[1],notes:a[2]}));
-  P=[...P,...pcs];
+  const dp=[["Chopin","Nocturno Op. 9 n.º 2","Cuidar el rubato en la melodía; pedal cambiando con cada armonía. Compases 20–24: digitación 5-4-3."],["Bach","Invención n.º 1 en Do mayor","Manos separadas a 60 bpm; articulación en non legato."],["Debussy","Clair de lune","Equilibrio de voces, pp en el inicio. Cuidar el pasaje de arpegios del compás 27."],["Beethoven","Sonata Op. 13 «Patética», 2.º mov.","Cantabile en la melodía; mano izquierda muy suave."],["Satie","Gymnopédie n.º 1","Tempo lento y regular; sin prisa en los silencios."]].map(a=>({id:uid(),composer:a[0],title:a[1],notes:a[2]}));
+  P=[...P,...dp];
   const goalsC=["Escalas mayores a 4 octavas, 80 bpm","Arpegios en tonalidades con bemoles","Ejercicios de independencia de dedos","Acordes y cadencias en 12 tonalidades"],goalsA=["Análisis armónico de la frase principal","Identificar la estructura y cadencias","Marcar digitación y fraseo","Trabajar compases difíciles lentamente"],goalsR=["Tocar completa sin detenerme","Limpiar los pasajes difíciles","Memorizar la sección central","Pulir dinámicas y pedal"];
   const pick=a=>a[Math.random()*a.length|0],today=new Date();
-  for(let i=150;i>=0;i--){const dt=new Date(today);dt.setDate(today.getDate()-i);if(Math.random()<.22)continue;const d=ymd(dt),trend=1+(150-i)/150*.35,pc=pick(pcs).id;
+  for(let i=150;i>=0;i--){const dt=new Date(today);dt.setDate(today.getDate()-i);if(Math.random()<.22)continue;const d=ymd(dt),trend=1+(150-i)/150*.35,pc=pick(dp).id;
     S.push({id:uid(),date:d,type:"calentamiento",min:Math.round((8+Math.random()*6)*trend),goal:pick(goalsC),piece:""});
     S.push({id:uid(),date:d,type:"analisis",min:Math.round((12+Math.random()*14)*trend),goal:pick(goalsA),piece:pc});
-    S.push({id:uid(),date:d,type:"repertorio",min:Math.round((18+Math.random()*22)*trend),goal:pick(goalsR),piece:pc})}
+    S.push({id:uid(),date:d,type:"repertorio",min:Math.round((18+Math.random()*22)*trend),goal:pick(goalsR),piece:pc});
+    if(i%38===0)S.push({id:uid(),date:d,type:"concierto",min:Math.round(40+Math.random()*25),goal:"Recital: tocar el programa completo sin detenerme",piece:"",pieces:[...dp].sort(()=>Math.random()-.5).slice(0,3).map(x=>x.id)})}
   save();renderAll();$("dmsg").textContent="Datos de ejemplo cargados.";
 }
 function exp(){
