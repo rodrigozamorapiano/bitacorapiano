@@ -91,7 +91,7 @@ svg text{fill:var(--mut);font-size:11px}
   <div class="card">
     <h2 id="ptitle">Agregar pieza</h2>
     <div class="form">
-      <div><label>Compositor</label><input id="pc" placeholder="Chopin"></div>
+      <div><label>Compositor</label><input id="pc" list="cl" autocomplete="off" placeholder="Chopin"><datalist id="cl"></datalist></div>
       <div><label>Nombre de la pieza</label><input id="pn" placeholder="Nocturno Op. 9 n.º 2"></div>
       <div class="full"><label>Notas específicas</label><textarea id="pt" placeholder="Pasajes difíciles, digitación, tempo objetivo, pedal…"></textarea></div>
       <div class="full" style="display:flex;gap:8px"><button class="p r" id="pbtn" style="flex:1" onclick="saveP()">Agregar pieza</button><button id="pcancel" style="display:none" onclick="cancelP()">Cancelar</button></div>
@@ -226,6 +226,7 @@ let editP=null;
 function saveP(){
   const o={composer:$("pc").value.trim(),title:$("pn").value.trim(),notes:$("pt").value.trim()};
   if(!o.title)return $("phint").textContent="Escribe el nombre de la pieza.";
+  const ex=o.composer&&P.find(p=>p.id!==editP&&p.composer.toLowerCase()===o.composer.toLowerCase());if(ex)o.composer=ex.composer;
   if(editP){Object.assign(P.find(p=>p.id===editP),o)}else P.push({id:uid(),...o});
   save();cancelP();$("phint").textContent="Guardado.";renderAll();
 }
@@ -234,6 +235,7 @@ function cancelP(){editP=null;["pc","pn","pt"].forEach(i=>$(i).value="");$("ptit
 let armedP=null;
 function delPiece(id){if(armedP!==id){armedP=id;return renderLib()}P=P.filter(p=>p.id!==id);armedP=null;save();renderAll()}
 function renderLib(){
+  $("cl").innerHTML=[...new Set(P.map(p=>p.composer).filter(Boolean))].sort((a,b)=>a.localeCompare(b)).map(c=>`<option value="${esc(c)}">`).join("");
   const q=$("ps").value.trim().toLowerCase();
   const L=[...P].sort((a,b)=>(a.composer+a.title).localeCompare(b.composer+b.title)).filter(p=>!q||(p.composer+" "+p.title).toLowerCase().includes(q));
   $("plist").innerHTML=L.length?L.map(p=>{
